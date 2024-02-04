@@ -3,6 +3,7 @@ import time
 import numpy as np
 from masks import binary_centroid, get_hsv_ranges
 from timers import timers
+from threading import Thread
 
 
 class Cam:
@@ -43,8 +44,10 @@ class Cam:
         self.cam_matrix = np.array(
             [[500, 0, 320], [0, 500, 240], [0, 0, 1]]
         )  # hard coded from camera calibration
+        self.stopped = False
 
     def release_camera(self):
+        self.stopped = True
         self.cap.release()
         print(f"{self.window} released!")
 
@@ -61,15 +64,24 @@ class Cam:
     def get_cap(self):
         return self.cap
 
+    def update(self):
+        while True:
+            if self.stopped:
+                return
+
+            self.ret, self.frame = self.cap.read()
+
     def set_cap(self, cap):
         self.cap = cap
+        Thread(target=self.update, args=()).start()
+
 
     def get_frame(self):
         _, frame = self.cap.read()
         self.frame = frame
         return frame
 
-    def ball_located(self):
+    def ball_position(self):
         return self.x and self.y
 
     def show_circled_frame(self):
@@ -102,7 +114,7 @@ class Cam:
         return np.array([ray_norm[0], ray_norm[2], -ray_norm[1]])  # unit vector
 
     def set_camera_id(self):
-        cap = cv.VideoCapture(self.camID, cv.CAP_DSHOW)
+        cap = cv.VideoCapture(self.camID)
         if not cap.isOpened():
             print(f"camera ID {self.camID} is not available.")
 
@@ -156,7 +168,7 @@ def find_camera_ids():
     for cam_id in range(
         3
     ):  # Adjust the range based on the number of cameras you want to check
-        cap = cv.VideoCapture(cam_id, cv.CAP_DSHOW)
+        cap = cv.VideoCapture(cam_id)
         ret, _ = cap.read()
         if ret:
             ids.append(cam_id)

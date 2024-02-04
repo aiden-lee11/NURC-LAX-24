@@ -1,7 +1,9 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+from numpy.polynomial import Polynomial
 
-
+# Code implentation taken from Vincent's triloc predict.py
+# https://github.com/v-rim/triloc/blob/main/triloc/predict.py
 class RLS:
     """Implementation from https://github.com/craig-m-k/Recursive-least-squares"""
 
@@ -47,9 +49,7 @@ class RLS:
         Individual observations in X should have a prepended 1 for the constant coefficient.
         """
         for i, point in enumerate(X):
-            x = np.matrix(np.ones((1, 4)))
-            x[0, 1:4] = point  # Copy the coordinates of the 3D point to x
-            x = np.transpose(x)
+            x = np.transpose(np.matrix(point))
             self.add_obs(x, y[i])
 
     def get_error(self):
@@ -64,19 +64,43 @@ class RLS:
         """
         Predict the value of observation x. x should be a numpy matrix (col vector)
         """
-        x = x[:, np.newaxis]
-        print(f"Shape of self.w: {self.w.shape}, Shape of x: {x.shape}")
-        print(self.w.T)
-        print(x)
-
-        return float(self.w.T @ x)  # changed * to @ because
+        return float(self.w.T * x)
 
 
-def regression_test():
+
+class RecursivePolynomialFit:
+    def __init__(self, degree, forgetting_factor=1):
+        self.degree = degree
+        self.forgetting_factor = forgetting_factor
+
+        self.RLS = RLS(degree + 1, forgetting_factor)
+
+    def add_point(self, x, y):
+        x_pow = [x**i for i in range(self.degree + 1)]
+        x_pow = np.array(x_pow)[:, None]
+
+        self.RLS.add_obs(x_pow, y)
+
+    def get_coef(self):
+        return np.array(self.RLS.w.T).flatten()
+
+    def solve(self, y):
+        coef = np.array(self.RLS.w.T).flatten()
+        coef[0] -= y
+        return Polynomial(coef).roots()
+
+    def reset(self):
+        self.RLS = RLS(self.degree, self.forgetting_factor)
+
+
+def quadratic_regression_test():
     # Predicting a quadratic function
     test_size = 1000
+
     # Test function
-    f = lambda x: 0.2 * x**2 - 3.8 * x - 5.1
+    def f(x):
+        return 0.2 * x**2 - 3.8 * x - 5.1
+
     # Gaussian noise to be added to the quadratic signal
     noise = np.random.randn(test_size)
     # You can play around with other noise (like sinusoidal)
@@ -84,7 +108,7 @@ def regression_test():
     y = np.array([f(i) for i in range(test_size)])
     noisy_y = y + noise
     lam = 0.98
-    LS = RLS(4, lam, 1)  # adjusted to 4 bc 3D plus constanst
+    LS = RLS(3, lam, 1)
     # Not using the RLS.fit function because I want to remember all the predicted values
     pred_x = []
     pred_y = []
@@ -95,6 +119,7 @@ def regression_test():
         x[0, 2] = i**2
         pred_x.append(i)
         pred_y.append((x @ LS.w).item())
+
         LS.add_obs(x.T, noisy_y[i])
 
     print("Predicted equation in the form Ax^2 + Bx + C")
@@ -107,8 +132,39 @@ def regression_test():
     plt.show()
 
 
+def RPF_test():
+    coef = np.array([1, 2, 3])
+    target_y = 6
+    eq = coef.copy()
+    eq[0] -= target_y
+
+    def f(x):
+        return sum([c * x**i for i, c in enumerate(coef)])
+    X = range(-100, 100)
+    points = np.array([(i, f(i)) for i in X])
+    
+    rpf = RecursivePolynomialFit(2)
+    for x, y in points:
+        rpf.add_point(x, y)
+
+    print(f"Expected coefficients = {coef}")
+    print(f"{rpf.get_coef().round(3) = }")
+    print()
+
+    print(f"Solving for f(x)={target_y}")
+    print(f"Expected solutions = {Polynomial(eq).roots()}")
+    print(f"{rpf.solve(target_y).round(3) = }")
+    print()
+
+    rpf.reset()
+    print("Reset RPF")
+    print(f"{rpf.get_coef().round(3) = }")
+
+
 if __name__ == "__main__":
-    regression_test()
-    # To deal with the output being dimensions in R^3, it seems sufficient to
-    # deal with each dimension separately
-    # (See https://math.stackexchange.com/q/2688132)
+    # quadratic_regression_test()
+    RPF_test()
+
+    # NOTE: To deal with the output being dimensions in R^3, it seems sufficient
+    # to deal with each dimension separately.
+    # See https://math.stackexchange.com/q/2688132

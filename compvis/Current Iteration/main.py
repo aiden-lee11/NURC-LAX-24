@@ -1,11 +1,11 @@
 import cv2
-import time
+from time import time
 import numpy as np
 from camera import camera_instantiator
 from timers import timers
 from triangulation import LSLocalizer
-from predict import RLS
-import matplotlib.pyplot as plt
+from predict import RecursivePolynomialFit
+from visualization import PointInSpace
 
 
 def calculate_points(lsl, rays, calculated_pts):
@@ -16,24 +16,24 @@ def calculate_points(lsl, rays, calculated_pts):
     return calculated_pt
 
 
-def fit_and_predict_rls(rls, calculated_pts):
-    labels = [time.time()] * len(calculated_pts)
-    rls.fit(calculated_pts, labels)
-    calculated_pt = calculated_pts[-1]
-    next_point = rls.predict(np.insert(calculated_pt, 0, 1))
-    print(f"Predicted next point: {next_point}")
-
-
-def draw_points(ax, new_point):
-    x, y, z = new_point[0], new_point[1], new_point[2]
-    ax.scatter(x, y, z, c="orange", marker="o", s=100)
-    ax.plot(x, y, z, color="r")
-    ax.set_xlabel("X"), ax.set_ylabel("Y"), ax.set_zlabel("Z")
-
-
-def main_loop(cameras, lsl, rls):
+def main_loop(cameras, lsl):
     calculated_pts = []
-    ax = plt.axes(projection="3d")
+     
+    lim_x = [-1, 1]
+    lim_y = [0, 2]
+    lim_z = [-0.5, 0.5]
+    plotter = PointInSpace(lim_x, lim_y, lim_z)
+    detection_start_time = time()   
+    t = time() - detection_start_time
+
+    detected_frames = 0
+    detected_frames_cap = 30
+    detected_frame_threshold = 5
+    detected = False
+    x_rpf = RecursivePolynomialFit(2)
+    y_rpf = RecursivePolynomialFit(2)
+    z_rpf = RecursivePolynomialFit(2)
+    
 
     while True:
         with timers.timers["Main Loop"]:
@@ -45,27 +45,50 @@ def main_loop(cameras, lsl, rls):
             rays = {
                 camera: camera.run()
                 for camera in cameras.values()
-                if camera.ball_located
+                if camera.ball_position
             }
 
             if rays:
                 calculated_point = calculate_points(lsl, rays, calculated_pts)
-                if len(calculated_pts) % 30 == 0:
-                    draw_points(ax, calculated_point)
+                plotter.draw_point(calculated_point)
 
-            # fit_and_predict_rls(rls, calculated_pts)
+                # print(f"Predicted ball position: {predicted_point}")
+
+                detected_frames += 1
+            else:
+                detected_frames -= 1
+
+            detected_frames = min(max(0, detected_frames), detected_frames_cap)
+
+            if detected_frames > detected_frame_threshold:
+                detected = True
+                t = time() - detection_start_time
+                x_rpf.add_point(t, calculated_point[0])
+                y_rpf.add_point(t, calculated_point[1])
+                z_rpf.add_point(t, calculated_point[2])
+
+            else:
+                if detected:
+                    detected = False
+                    print(f"Detection that started at {detection_start_time}")
+                    print(f"{x_rpf.get_coef().round(3) = }")
+                    print(f"{y_rpf.get_coef().round(3) = }")
+                    print(f"{z_rpf.get_coef().round(3) = }")
+                x_rpf.reset()
+                y_rpf.reset()
+                z_rpf.reset()
+                detection_start_time = time()
+
 
         timers.record_time("Main Loop")
-    plt.show()
 
 
 def main(camera_transforms, cam_ids=None):
     cameras = camera_instantiator(cam_ids)
     print("Press q to release cameras and exit.\n")
     lam = 0.98
-    rls = RLS(4, lam, 1)
     lsl = LSLocalizer(camera_transforms)
-    main_loop(cameras, lsl, rls)
+    main_loop(cameras, lsl)
 
     cv2.destroyAllWindows()
     timers.display_averages()
