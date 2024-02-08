@@ -1,11 +1,6 @@
 import cv2
 import numpy as np
 
-""" 
-1/14/24 Need to fix resetting mask -- current implementation does not support
-
-"""
-
 
 def binary_centroid(camera):
     # Take masked frame and use a binary thresholding function to create a binary image. (Reduces the image from NxNx3 to NxN)./
@@ -14,10 +9,11 @@ def binary_centroid(camera):
     # I would expect this function to be faster than finding the contours with an opencv function.
 
     # Code borrowed from hsv_mask_detec to get the mask
+
     if not camera.frame.all:
         camera.x, camera.y = None, None
     hsv = cv2.cvtColor(camera.frame, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, camera.orange_lower, camera.orange_upper)
+    mask = cv2.inRange(hsv, camera.hsv_value[0], camera.hsv_value[1])
 
     # Compute the binary threshold of the mask
     ret, thresh = cv2.threshold(mask, 200, 255, cv2.THRESH_BINARY)
@@ -38,8 +34,6 @@ def binary_centroid(camera):
         return
     # Finally, set camera.x and camera.y to the computed positions
     camera.x, camera.y = positions[0], positions[1]
-    # Function doesn't detect radius; can change to whatever
-    camera.R = 10
 
 
 def get_hsv_ranges(camera):
@@ -104,7 +98,6 @@ def get_hsv_ranges(camera):
             )
 
             mask = cv2.inRange(hsv_frame, lowest_hsv, highest_hsv)
-            # result = cv2.bitwise_and(camera.frame, camera.frame, mask=mask)
             mask_inv = cv2.bitwise_not(mask)
             result = cv2.bitwise_and(camera.frame, camera.frame, mask=mask_inv)
             cv2.imshow("Video Stream", result)
@@ -113,10 +106,10 @@ def get_hsv_ranges(camera):
             cv2.imshow("Video Stream", camera.frame)
 
         if cv2.waitKey(1) & 0xFF == ord("s"):
-            print(f"--> Orange Lower for {camera.window}: {lowest_hsv}")
-            print(f"--> Orange Upper for {camera.window}: {highest_hsv}\n")
-            camera.orange_lower = lowest_hsv
-            camera.orange_upper = highest_hsv
+            print(f"--> Orange Lower for {camera.name}: {lowest_hsv}")
+            print(f"--> Orange Upper for {camera.name}: {highest_hsv}\n")
+            camera.hsv_values = lowest_hsv, highest_hsv
+            print(camera.hsv_values)
             break
 
         elif cv2.waitKey(1) == ord("r"):

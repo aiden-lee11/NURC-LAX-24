@@ -88,6 +88,12 @@ class RecursivePolynomialFit:
         coef = np.array(self.RLS.w.T).flatten()
         coef[0] -= y
         return Polynomial(coef).roots()
+    
+    def plug_in(self, inter_time):
+        coef = np.array(self.RLS.w.T).flatten()
+        return sum([c * inter_time**i for i, c in enumerate(coef)])
+        
+
 
     def reset(self):
         self.RLS = RLS(self.degree, self.forgetting_factor)
@@ -168,3 +174,9 @@ if __name__ == "__main__":
     # NOTE: To deal with the output being dimensions in R^3, it seems sufficient
     # to deal with each dimension separately.
     # See https://math.stackexchange.com/q/2688132
+
+"""
+To solve for time, solve the coeff of y polynomial = 0 (y-plane under the cams). This solves for the time of intersection
+between the ball and end-defector plane. After that, use the solution to that equation as the value of t to plug into 
+x and z equations to predict where the end-defector should move to.
+"""

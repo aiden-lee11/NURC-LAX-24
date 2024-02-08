@@ -13,34 +13,25 @@ class Cam:
     Attributes:
     - cap: VideoCapture object for camera.
     - frame: Current frame from the camera.
-    - hsv_value: HSV value range for color detection.
-    - orange_upper: Upper HSV range for orange color.
-    - orange_lower: Lower HSV range for orange color.
-    - window: Name of the camera window.
+    - hsv_value: HSV value range for color detection. In form (hsv_lower, hsv_upper) with tuples of each
+    - name: Name of the camera window.
     - camID: Camera ID.
     - x: X-coordinate of detected object.
     - y: Y-coordinate of detected object.
     - R: Radius of detected object.
     - fps: Frames per second.
-    - W: Width of the frame in pixels.
-    - H: Height of the frame in pixels.
     """
 
-    def __init__(self, camID=None):
+    def __init__(self, name, camID=None):
         self.cap = None
         self.frame = None
         self.hsv_value = None
-        self.orange_upper = np.array([18, 255, 255])
-        self.orange_lower = np.array([10, 149, 138])
-        self.window = None
+        self.name = name
         self.camID = camID
         self.x = None
         self.y = None
-        self.R = None
+        self.R = 10
         self.fps = None
-        # Height and Width of the frame in pixels
-        self.W = None
-        self.H = None
         self.cam_matrix = np.array(
             [[500, 0, 320], [0, 500, 240], [0, 0, 1]]
         )  # hard coded from camera calibration
@@ -49,7 +40,7 @@ class Cam:
     def release_camera(self):
         self.stopped = True
         self.cap.release()
-        print(f"{self.window} released!")
+        print(f"{self.name} released!")
 
     def set_id(self, id):
         self.camID = id
@@ -57,6 +48,9 @@ class Cam:
 
     def get_id(self):
         return self.camID
+    
+    def get_name(self):
+        return self.name
 
     def has_id(self):
         return not self.camID == -1
@@ -82,7 +76,7 @@ class Cam:
         return frame
 
     def ball_position(self):
-        return self.x and self.y
+        return self.x is not None and self.y is not None
 
     def show_circled_frame(self):
         if self.x and self.y and self.R:
@@ -96,53 +90,19 @@ class Cam:
 
         if self.fps:
             cv.putText(
-                self.frame, str(self.fps), (self.W - 100, 50), 0, 1, (0, 255, 0), 2
+                self.frame, str(self.fps), (1080 - 100, 50), 0, 1, (0, 255, 0), 2
             )
 
-        cv.imshow(self.window, self.frame)
+        cv.imshow(self.name, self.frame)
 
     def get_ray(self):
-        if not (self.x and self.y):
-            pass
+        if not self.ball_position():
+            return None
         Ki = np.linalg.inv(self.cam_matrix)
         ray = Ki @ np.array([self.x, self.y, 1.0])
         ray_norm = ray / np.linalg.norm(ray)
 
-        # cos_angle = ray1.dot(ray2) / (np.linalg.norm(ray1) * np.linalg.norm(ray2))
-        # angle_radians = np.arccos(cos_angle)
-        # angle_degrees = angle_radians * 180 / 3.141592
         return np.array([ray_norm[0], ray_norm[2], -ray_norm[1]])  # unit vector
-
-    def set_camera_id(self):
-        cap = cv.VideoCapture(self.camID)
-        if not cap.isOpened():
-            print(f"camera ID {self.camID} is not available.")
-
-        print("Press s to use displayed camera.\nPress q to skip to the next camera.")
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                print(f"Failed to retrieve frame from camera ID {self.camID}.")
-                break
-
-            cv.imshow(f"camera ID {self.camID}", frame)
-            key = cv.waitKey(1)
-            if key == ord("s"):
-                self.cap = cap
-                self.window = f"Cam {self.camID}"
-                self.H = np.shape(frame)[0]
-                self.W = np.shape(frame)[1]
-                print(f"--> camera Index: [{self.camID}] saved!\n")
-                cv.destroyAllWindows()
-                return
-
-            if key == ord("q"):
-                print("--> camera skipped!")
-                break
-
-        cap.release()
-        cv.destroyAllWindows()
 
     def run(self):
         t0 = time.time()
@@ -162,6 +122,45 @@ class Cam:
 
         return self.get_ray()
 
+    def assign_captures(self):
+        print("Press [0-9] to assign the capture to that camera")
+        print("Press [s] to skip")
+        print("Press [q] to quit")
+
+        print("-")
+        
+        print(f"Assigning {self.get_name()} Camera")
+        print("-")
+
+        capture_index = 0
+        cap = cv.VideoCapture(capture_index)
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            cv.imshow(f"Capture [{capture_index}]", frame)
+
+            key = cv.waitKey(1)
+            if key == ord("q"):
+                print("Ending capture assignment")
+                cv.destroyAllWindows()
+                break
+            elif key == ord("s"):
+                print(f"Skipping capture [{capture_index}]")
+                capture_index += 1
+                cap = cv.VideoCapture(capture_index)
+                cv.destroyAllWindows()
+            elif key in (ord(c) for c in "0123456789"):
+                camera_index = int(chr(key))
+                print(f"Assigning capture [{capture_index}] to camera [{camera_index}]")
+                self.set_id(capture_index)
+                self.set_cap(cap)
+                capture_index += 1
+                cap = cv.VideoCapture(capture_index)
+                cv.destroyAllWindows()
+
 
 def find_camera_ids():
     ids = []
@@ -175,24 +174,37 @@ def find_camera_ids():
     return ids
 
 
-def camera_instantiator(cam_ids=None):
+def camera_instantiator(cam_ids=None, static=False):
     # quick function to set up each camera
     cameras = {}
     if cam_ids is None:
         cam_ids = find_camera_ids()
 
+    lr = 0
+    pos = ["Left", "Right"]
     for cam_id in cam_ids:
         cam_name = f"Cam{cam_id}"
 
         # cap = None fix
-        test_cam = Cam(camID=cam_id)
-        test_cam.set_camera_id()
+        test_cam = Cam(camID=cam_id, name= pos[lr])
+        test_cam.assign_captures()
 
         if test_cam.cap:
             cameras[cam_name] = test_cam
+            lr += 1
+
 
     for camera in cameras.values():
-        get_hsv_ranges(camera)
+        if static:
+            hsv = [12, 175, 225]
+            deltas = [16, 80, 120]
+
+            lower_threshold = np.array([max(0, hsv[i] - deltas[i]) for i in range(3)])
+            upper_threshold = np.array([min(255, hsv[i] + deltas[i]) for i in range(3)])
+
+            camera.hsv_value = (lower_threshold, upper_threshold)
+        else:
+            get_hsv_ranges(camera)
 
     return cameras
 

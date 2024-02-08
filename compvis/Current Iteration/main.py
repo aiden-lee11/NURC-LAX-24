@@ -16,7 +16,7 @@ def calculate_points(lsl, rays, calculated_pts):
     return calculated_pt
 
 
-def main_loop(cameras, lsl):
+def main_loop(cameras, lsl, static):
     calculated_pts = []
      
     lim_x = [-1, 1]
@@ -34,6 +34,7 @@ def main_loop(cameras, lsl):
     y_rpf = RecursivePolynomialFit(2)
     z_rpf = RecursivePolynomialFit(2)
     
+    
 
     while True:
         with timers.timers["Main Loop"]:
@@ -43,10 +44,11 @@ def main_loop(cameras, lsl):
                 break
 
             rays = {
-                camera: camera.run()
+                camera: result
                 for camera in cameras.values()
-                if camera.ball_position
+                if (result := camera.run()) is not None
             }
+
 
             if rays:
                 calculated_point = calculate_points(lsl, rays, calculated_pts)
@@ -67,6 +69,14 @@ def main_loop(cameras, lsl):
                 y_rpf.add_point(t, calculated_point[1])
                 z_rpf.add_point(t, calculated_point[2])
 
+                intersection_time = y_rpf.solve(0).round(3)
+                x_predicted = x_rpf.plug_in(intersection_time)
+                z_predicted = z_rpf.plug_in(intersection_time)
+
+                print(f"x_coord prediction = {x_predicted}")
+                print(f"z_coord prediction = {z_predicted}")
+
+
             else:
                 if detected:
                     detected = False
@@ -84,11 +94,12 @@ def main_loop(cameras, lsl):
 
 
 def main(camera_transforms, cam_ids=None):
-    cameras = camera_instantiator(cam_ids)
+    static_hsv = input('Use static hsv values? (y/n): ').lower().strip() == 'y'
+    cameras = camera_instantiator(cam_ids, static_hsv)
     print("Press q to release cameras and exit.\n")
     lam = 0.98
     lsl = LSLocalizer(camera_transforms)
-    main_loop(cameras, lsl)
+    main_loop(cameras, lsl, static_hsv)
 
     cv2.destroyAllWindows()
     timers.display_averages()
