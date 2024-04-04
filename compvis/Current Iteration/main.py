@@ -1,12 +1,15 @@
 import cv2
 from time import time
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 from camera import camera_instantiator
 from timers import timers
 from triangulation import LSLocalizer
 from predict import RecursivePolynomialFit
 from visualization import PointInSpace
 
+
+# send updated position in the plane of the robot, coordinate frame using, 
 
 def calculate_points(lsl, rays, calculated_pts):
     ray_vals = np.array(list(rays.values()))
@@ -69,25 +72,27 @@ def main_loop(cameras, lsl, static):
                 y_rpf.add_point(t, calculated_point[1])
                 z_rpf.add_point(t, calculated_point[2])
 
-                intersection_time = y_rpf.solve(0).round(3)
+                intersection_time = y_rpf.solve(0).round(3)[1] # inter_time gets [negative positive] only need positive
+                #print(f"intersection time = {intersection_time}")
                 x_predicted = x_rpf.plug_in(intersection_time)
                 z_predicted = z_rpf.plug_in(intersection_time)
 
-                print(f"x_coord prediction = {x_predicted}")
-                print(f"z_coord prediction = {z_predicted}")
+                #print(f"x_coord prediction = {x_predicted}")
+                #print(f"z_coord prediction = {z_predicted}")
+
+                continue
 
 
-            else:
-                if detected:
-                    detected = False
-                    print(f"Detection that started at {detection_start_time}")
-                    print(f"{x_rpf.get_coef().round(3) = }")
-                    print(f"{y_rpf.get_coef().round(3) = }")
-                    print(f"{z_rpf.get_coef().round(3) = }")
+            elif detected:
+                detected = False
+                print(f"Detection that started at {detection_start_time}")
+                print(f"{x_rpf.get_coef().round(3) = }")
+                print(f"{y_rpf.get_coef().round(3) = }")
+                print(f"{z_rpf.get_coef().round(3) = }")
                 x_rpf.reset()
                 y_rpf.reset()
                 z_rpf.reset()
-                detection_start_time = time()
+            detection_start_time = time()
 
 
         timers.record_time("Main Loop")
@@ -118,12 +123,32 @@ if __name__ == "__main__":
     # second camera rotated pi/2 about Z at (1, 1, 0)
     T_cam2 = np.array(
         [
-            [0, -1, 0, 1],
+            [0, 1, 0, 1],
             [1, 0, 0, 1],
             [0, 0, 1, 0],
             [0, 0, 0, 1],
         ]
     )
+
+
+    #first camera at origin
+    # T_cam1 = np.array(
+    #     [
+    #         [1, 0, 0, 0],
+    #         [0, 1, 0, 0],
+    #         [0, 0, 1, 0],
+    #         [0, 0, 0, 1],
+    #     ]
+    # )
+    # # second camera unrotated about Z at (0, 1, 0)
+    # T_cam2 = np.array(
+    #     [
+    #         [1, 0, 0, 0],
+    #         [0, 1, 0, 1],
+    #         [0, 0, 1, 0],
+    #         [0, 0, 0, 1],
+    #     ]
+    # )
     camera_transforms = [T_cam1, T_cam2]
 
     main(camera_transforms)

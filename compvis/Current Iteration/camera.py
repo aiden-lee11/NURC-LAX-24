@@ -2,8 +2,9 @@ import cv2 as cv
 import time
 import numpy as np
 from masks import binary_centroid, get_hsv_ranges
+from detect import BinaryMotionDetector
 from timers import timers
-from threading import Thread
+#from threading import Thread
 
 
 class Cam:
@@ -33,7 +34,9 @@ class Cam:
         self.R = 10
         self.fps = None
         self.cam_matrix = np.array(
-            [[500, 0, 320], [0, 500, 240], [0, 0, 1]]
+            [[500, 0, 320], 
+             [0, 500, 240], 
+             [0, 0, 1]]
         )  # hard coded from camera calibration
         self.stopped = False
 
@@ -67,7 +70,7 @@ class Cam:
 
     def set_cap(self, cap):
         self.cap = cap
-        Thread(target=self.update, args=()).start()
+        #Thread(target=self.update, args=()).start()
 
 
     def get_frame(self):
@@ -90,7 +93,7 @@ class Cam:
 
         if self.fps:
             cv.putText(
-                self.frame, str(self.fps), (1080 - 100, 50), 0, 1, (0, 255, 0), 2
+                self.frame, str(self.fps), (np.shape(self.frame)[1] - 100, 50), 0, 1, (0, 255, 0), 2
             )
 
         cv.imshow(self.name, self.frame)
@@ -99,8 +102,14 @@ class Cam:
         if not self.ball_position():
             return None
         Ki = np.linalg.inv(self.cam_matrix)
-        ray = Ki @ np.array([self.x, self.y, 1.0])
+        x_adjust = self.x - 320
+        y_adjust = self.y - 240
+        ray = np.matmul(Ki, np.array([x_adjust, y_adjust, 0])) 
+        #ray = Ki @ np.array([self.x, self.y, 1.0])
+        #print(f"camera {self.name} has ray {ray}")
         ray_norm = ray / np.linalg.norm(ray)
+
+        print(f"camera {self.name} has ray_norm {[ray_norm[0], ray_norm[2], -ray_norm[1]]}")
 
         return np.array([ray_norm[0], ray_norm[2], -ray_norm[1]])  # unit vector
 
@@ -111,8 +120,9 @@ class Cam:
         timers.record_time("Get Frame")
 
         with timers.timers["Binary Centroid"]:
-            binary_centroid(self)
+           binary_centroid(self)
         timers.record_time("Binary Centroid")
+
 
         with timers.timers["Show Frame"]:
             self.show_circled_frame()
@@ -122,45 +132,38 @@ class Cam:
 
         return self.get_ray()
 
-    def assign_captures(self):
-        print("Press [0-9] to assign the capture to that camera")
-        print("Press [s] to skip")
-        print("Press [q] to quit")
+    def set_camera_id(self):
+            cap = cv.VideoCapture(self.camID)
+            if not cap.isOpened():
+                print(f"camera ID {self.camID} is not available.")
 
-        print("-")
-        
-        print(f"Assigning {self.get_name()} Camera")
-        print("-")
+            print("Press [0-9] to assign the capture to that camera")
+            print("Press [q] to quit")
 
-        capture_index = 0
-        cap = cv.VideoCapture(capture_index)
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    print(f"Failed to retrieve frame from camera ID {self.camID}.")
+                    break
 
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+                cv.imshow(f"camera ID {self.camID}", frame)
+                key = cv.waitKey(1)
+                if key in (ord(c) for c in "0123456789"):
+                    camera_index = int(chr(key))
+                    print(f"Assigning capture [{camera_index}] to camera [{self.camID}]")
+                    self.cap = cap
+                    self.name = f"Cam {camera_index}"
+                    cap = cv.VideoCapture(camera_index)
+                    cv.destroyAllWindows()
+                    return 
 
-            cv.imshow(f"Capture [{capture_index}]", frame)
 
-            key = cv.waitKey(1)
-            if key == ord("q"):
-                print("Ending capture assignment")
-                cv.destroyAllWindows()
-                break
-            elif key == ord("s"):
-                print(f"Skipping capture [{capture_index}]")
-                capture_index += 1
-                cap = cv.VideoCapture(capture_index)
-                cv.destroyAllWindows()
-            elif key in (ord(c) for c in "0123456789"):
-                camera_index = int(chr(key))
-                print(f"Assigning capture [{capture_index}] to camera [{camera_index}]")
-                self.set_id(capture_index)
-                self.set_cap(cap)
-                capture_index += 1
-                cap = cv.VideoCapture(capture_index)
-                cv.destroyAllWindows()
+                if key == ord("q"):
+                    print("--> camera skipped!")
+                    break
 
+            cap.release()
+            cv.destroyAllWindows()
 
 def find_camera_ids():
     ids = []
@@ -182,16 +185,19 @@ def camera_instantiator(cam_ids=None, static=False):
 
     lr = 0
     pos = ["Left", "Right"]
+    print("Assign 0 to the left camera and 1 to the right camera\n")
     for cam_id in cam_ids:
         cam_name = f"Cam{cam_id}"
 
         # cap = None fix
         test_cam = Cam(camID=cam_id, name= pos[lr])
-        test_cam.assign_captures()
+        test_cam.set_camera_id()
 
-        if test_cam.cap:
+        if test_cam.cap and test_cam.name:
             cameras[cam_name] = test_cam
             lr += 1
+            if lr >= 2:
+                break
 
 
     for camera in cameras.values():

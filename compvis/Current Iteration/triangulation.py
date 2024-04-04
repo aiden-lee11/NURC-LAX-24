@@ -40,7 +40,7 @@ class LSLocalizer:
             ray -= transform_origin
 
             transformed_rays.append(ray[:3])
-
+            #print(f"{i} == {ray}")
         return np.array(transformed_rays)
 
     def find_nearest_point(self, ray_points, ray_directions, weights=None):

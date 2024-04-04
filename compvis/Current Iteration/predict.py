@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.polynomial import Polynomial
 
-# Code implentation taken from Vincent's triloc predict.py
+# Code implementation taken from Vincent's triloc predict.py
 # https://github.com/v-rim/triloc/blob/main/triloc/predict.py
 class RLS:
     """Implementation from https://github.com/craig-m-k/Recursive-least-squares"""
@@ -15,6 +15,7 @@ class RLS:
         self.num_vars = num_vars
 
         # delta controls the initial state.
+        print(f"num_vars = {self.num_vars}")
         self.A = delta * np.matrix(np.identity(self.num_vars))
         self.w = np.matrix(np.zeros(self.num_vars))
         self.w = self.w.reshape(self.w.shape[1], 1)
@@ -34,7 +35,7 @@ class RLS:
         Add the observation x with label t.
         x is a column vector as a numpy matrix
         t is a real scalar
-        """
+        """       
         z = self.lam_inv * self.A * x
         alpha = (1 + (x.T @ z).item()) ** (-1)
         self.a_priori_error = t - (self.w.T @ x).item()
@@ -70,10 +71,10 @@ class RLS:
 
 class RecursivePolynomialFit:
     def __init__(self, degree, forgetting_factor=1):
-        self.degree = degree
+        self.degree = degree 
         self.forgetting_factor = forgetting_factor
 
-        self.RLS = RLS(degree + 1, forgetting_factor)
+        self.RLS = RLS(num_vars=degree + 1, lam = forgetting_factor)
 
     def add_point(self, x, y):
         x_pow = [x**i for i in range(self.degree + 1)]
@@ -91,12 +92,12 @@ class RecursivePolynomialFit:
     
     def plug_in(self, inter_time):
         coef = np.array(self.RLS.w.T).flatten()
+        #print(f"coef at time {inter_time} = {coef}")
         return sum([c * inter_time**i for i, c in enumerate(coef)])
-        
 
 
     def reset(self):
-        self.RLS = RLS(self.degree, self.forgetting_factor)
+        self.RLS = RLS(self.degree + 1, self.forgetting_factor)
 
 
 def quadratic_regression_test():
