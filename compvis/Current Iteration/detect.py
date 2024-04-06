@@ -71,18 +71,27 @@ if __name__ == "__main__":
     deltas = [16, 80, 120]
 
     cam_1 = camera.Camera("Main Camera Name")
-    detector = BinaryMotionDetector(hsv, deltas)
-
+    #detector = BinaryMotionDetector(hsv, deltas)
+    bg_subtractor = cv.createBackgroundSubtractorMOG2()
     camera.assign_captures([cam_1])
     while True:
         ret, frame = cam_1.get_frame()
         if not ret:
             print("Frame not received successfully")
             break
-
-        ret, y_median, x_median = detector.detect(frame)
-        if ret:
-            cv.circle(frame, (x_median, y_median), 8, (0, 0, 255), -1)
+        fg_mask = bg_subtractor.apply(frame)
+        fg_mask = cv.erode(fg_mask,None,iterations=2)
+        fg_mask = cv.dilate(fg_mask,None,iterations=2)
+        contours,_ = cv.findContours(fg_mask,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            if cv.contourArea(contour) > 150:
+                (x,y),radius = cv.minEnclosingCircle(contour)
+                center = (int(x),int(y))
+                radius = int(radius)
+                cv.circle(frame,center,radius,(0,0,255),-1)
+        #ret, y_median, x_median = detector.detect(frame)
+        #if ret:
+            #cv.circle(frame, (x_median, y_median), 8, (0, 0, 255), -1)
 
         cv.imshow("Motion detection", frame)
         if cv.waitKey(1) == ord("q"):
