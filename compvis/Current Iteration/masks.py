@@ -27,6 +27,7 @@ def binary_centroid(camera):
 
     # Put them into a numpy array
     positions = np.array([np.median(x_coords), np.median(y_coords)])
+    print(f"positions for {camera.name} = {positions}")
 
     # If there are no pixels that are set to 1, then return early
     if np.any(np.isnan(positions)):
@@ -116,6 +117,10 @@ def get_hsv_ranges(camera):
             # Make the limits revert back
             print(f"--> Limits Reset!")
             camera.hsv_value = None
+            hsv_values = []
+
+            highest_hsv = np.array([0, 0, 0])
+            lowest_hsv = np.array([180, 255, 255])
             continue
 
         elif cv2.waitKey(1) == ord("q"):

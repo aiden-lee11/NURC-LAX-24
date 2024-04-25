@@ -33,12 +33,17 @@ class Cam:
         self.y = None
         self.R = 10
         self.fps = None
+
+        # cam_matrix hold [[fx, 0, ox], 
+        #                   [0, fy, oy], 
+        #                   [0, 0, 1]]
         self.cam_matrix = np.array(
             [[500, 0, 320], 
              [0, 500, 240], 
              [0, 0, 1]]
         )  # hard coded from camera calibration
         self.stopped = False
+        #self.b_offset = b_offset
 
     def release_camera(self):
         self.stopped = True
@@ -98,21 +103,6 @@ class Cam:
 
         cv.imshow(self.name, self.frame)
 
-    def get_ray(self):
-        if not self.ball_position():
-            return None
-        Ki = np.linalg.inv(self.cam_matrix)
-        x_adjust = self.x - 320
-        y_adjust = self.y - 240
-        ray = np.matmul(Ki, np.array([x_adjust, y_adjust, 0])) 
-        #ray = Ki @ np.array([self.x, self.y, 1.0])
-        #print(f"camera {self.name} has ray {ray}")
-        ray_norm = ray / np.linalg.norm(ray)
-
-        print(f"camera {self.name} has ray_norm {[ray_norm[0], ray_norm[2], -ray_norm[1]]}")
-
-        return np.array([ray_norm[0], ray_norm[2], -ray_norm[1]])  # unit vector
-
     def run(self):
         t0 = time.time()
         with timers.timers["Get Frame"]:
@@ -130,7 +120,7 @@ class Cam:
 
         self.fps = 1 / (time.time() - t0)
 
-        return self.get_ray()
+        return self.ball_position()
 
     def set_camera_id(self):
             cap = cv.VideoCapture(self.camID)
